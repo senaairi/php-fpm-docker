@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@import 'tw-animate-css';
+@import "tailwindcss-primeui";
+
+#p-license-host {
+    display: none !important;
+}

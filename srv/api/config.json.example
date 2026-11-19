@@ -1,0 +1,33 @@
+{
+  "boot_script": "",
+  "shutdown_script": "",
+  "services": {
+    "_defaults": {
+      "restart_interval": 5,
+      "output_max_lines": 200,
+      "output_log": false,
+      "stop_command": ""
+    },
+    "worker": {
+      "command": "php /wwwroot/worker.php",
+      "stop_command": "",
+      "cwd": "/wwwroot",
+      "env": {},
+      "restart_interval": 5,
+      "output_max_lines": 200,
+      "output_log": false
+    }
+  },
+  "timer": {
+    "tt2": {
+      "type": "tick",
+      "time": "5",
+      "command": "return shell_exec('echo 123');"
+    },
+    "tt3": {
+      "type": "time",
+      "time": "17:19:00",
+      "command": "return shell_exec('echo aaaa3');"
+    }
+  }
+}

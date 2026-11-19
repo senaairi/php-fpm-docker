@@ -1,0 +1,4 @@
+.idea/*
+rootfs/data
+rootfs/pfs
+docs-local
