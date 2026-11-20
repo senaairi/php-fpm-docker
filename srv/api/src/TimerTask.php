@@ -8,7 +8,11 @@ class TimerTask
     public string $type;
     /** @var string  type=tick时，传递单位秒 */
     public string $time;
-    public string $command;
+    /** @var string|array<int, string> */
+    public string|array $command = '';
+    public string $cwd = '';
+    /** @var array<string, string> */
+    public array $env = [];
     public string $last_exec;
     public ?string $last_logs;
     public int $timer;
@@ -24,6 +28,21 @@ class TimerTask
     /** @var 'wait' | 'exec' */
     public string $status = 'wait';
     public bool $down = false;
+
+    /** @param array<string, mixed> $config */
+    public function configureProcess(array $config): void
+    {
+        $this->command = $this->normalizeCommand($config['command'] ?? '');
+        $this->cwd = is_string($config['cwd'] ?? null) && $config['cwd'] !== ''
+            ? $config['cwd']
+            : ROOT_PATH;
+        $this->env = is_array($config['env'] ?? null)
+            ? array_map(
+                static fn ($environmentValue): string => (string)$environmentValue,
+                $config['env'],
+            )
+            : [];
+    }
 
     public function boot(): void
     {
@@ -94,11 +113,15 @@ class TimerTask
 
     private function runCommand(): string
     {
-        if (trim($this->command) === '') {
+        if ($this->command === '' || $this->command === []) {
             throw new \RuntimeException('定时器命令为空');
         }
 
-        $processManager = new ProcessManager($this->command, ROOT_PATH, $_ENV);
+        $processManager = new ProcessManager(
+            $this->command,
+            $this->cwd !== '' ? $this->cwd : ROOT_PATH,
+            array_merge($_ENV, $this->env),
+        );
         $this->process = $processManager;
         try {
             $processManager->start();
@@ -134,5 +157,13 @@ class TimerTask
         if ($processManager->isRunning()) {
             $processManager->forceStop(1);
         }
+    }
+
+    /** @return string|array<int, string> */
+    private function normalizeCommand(mixed $command): string|array
+    {
+        return is_array($command)
+            ? array_map(static fn ($commandPart): string => (string)$commandPart, array_values($command))
+            : trim((string)$command);
     }
 }
