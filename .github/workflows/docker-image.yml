@@ -4,15 +4,41 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
 
 jobs:
+  image-tag:
+    name: Generate image tag
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - id: tag
+        run: printf 'tag=%s\n' "$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
 
   build:
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag lihzorg/php-fpm-docker:$(date +%Y%m%d-%H%M)
+    needs: image-tag
+    uses: docker/github-builder/.github/workflows/build.yml@v1
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      output: image
+      push: ${{ github.ref == 'refs/heads/main' }}
+      set-meta-labels: true
+      set-meta-annotations: true
+      meta-images: ${{ vars.DOCKERHUB_USERNAME }}/php-fpm-docker
+      meta-flavor: latest=${{ github.ref == 'refs/heads/main' }}
+      meta-tags: |
+        type=raw,value=${{ needs.image-tag.outputs.tag }},enable=${{ github.event_name != 'pull_request' }}
+        type=ref,event=pr
+    secrets:
+      registry-auths: |
+        - registry: docker.io
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
