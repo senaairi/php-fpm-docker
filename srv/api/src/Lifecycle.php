@@ -8,8 +8,10 @@ use Ramsey\Uuid\Uuid;
  */
 class Lifecycle
 {
-    private string $boot_script = '';
-    private string $shutdown_script = '';
+    /** @var array{command: string|array<int, string>, cwd: string, env: array<string, string>} */
+    private array $boot_script = [];
+    /** @var array{command: string|array<int, string>, cwd: string, env: array<string, string>} */
+    private array $shutdown_script = [];
 
     /** @var 'init' | 'running' | 'stopping' | 'stopped' */
     public string $status = 'init';
@@ -113,12 +115,12 @@ class Lifecycle
     private function loadScripts(array $config): void
     {
         $lifecycle = is_array($config['lifecycle'] ?? null) ? $config['lifecycle'] : [];
-        $this->boot_script = $this->scriptValue($config, $lifecycle, [
+        $this->boot_script = $this->resolveScriptConfig($config, $lifecycle, [
             'boot_script',
             'startup_script',
             'boot',
         ]);
-        $this->shutdown_script = $this->scriptValue($config, $lifecycle, [
+        $this->shutdown_script = $this->resolveScriptConfig($config, $lifecycle, [
             'shutdown_script',
             'stop_script',
             'shutdown',
@@ -129,29 +131,76 @@ class Lifecycle
      * @param array<string, mixed> $config
      * @param array<string, mixed> $lifecycle
      * @param string[] $keys
+     * @return array{command: string|array<int, string>, cwd: string, env: array<string, string>}
      */
-    private function scriptValue(array $config, array $lifecycle, array $keys): string
+    private function resolveScriptConfig(array $config, array $lifecycle, array $keys): array
     {
         foreach ($keys as $key) {
-            if (isset($config[$key]) && is_string($config[$key])) {
-                return trim($config[$key]);
+            if (isset($config[$key])) {
+                $script = $this->normalizeScript($config[$key]);
+                if ($script !== null) {
+                    return $script;
+                }
             }
         }
         foreach ($keys as $key) {
-            if (isset($lifecycle[$key]) && is_string($lifecycle[$key])) {
-                return trim($lifecycle[$key]);
+            if (isset($lifecycle[$key])) {
+                $script = $this->normalizeScript($lifecycle[$key]);
+                if ($script !== null) {
+                    return $script;
+                }
             }
         }
-        return '';
+        return ['command' => '', 'cwd' => ROOT_PATH, 'env' => []];
     }
 
-    private function runScript(string $script, string $name): void
+    /** @return array{command: string|array<int, string>, cwd: string, env: array<string, string>}|null */
+    private function normalizeScript(mixed $script): ?array
     {
-        if (trim($script) === '') {
+        if (!is_string($script) && !is_array($script)) {
+            return null;
+        }
+
+        $config = is_array($script) && array_key_exists('command', $script)
+            ? $script
+            : ['command' => $script];
+
+        return [
+            'command' => $this->normalizeCommand($config['command'] ?? ''),
+            'cwd' => $this->normalizeWorkingDirectory($config['cwd'] ?? null),
+            'env' => $this->normalizeEnvironment($config['env'] ?? null),
+        ];
+    }
+
+    /** @return string|array<int, string> */
+    private function normalizeCommand(mixed $command): string|array
+    {
+        return is_array($command)
+            ? array_map(static fn ($commandPart): string => (string)$commandPart, array_values($command))
+            : trim((string)$command);
+    }
+
+    private function normalizeWorkingDirectory(mixed $cwd): string
+    {
+        return is_string($cwd) && $cwd !== '' ? $cwd : ROOT_PATH;
+    }
+
+    /** @return array<string, string> */
+    private function normalizeEnvironment(mixed $environment): array
+    {
+        return is_array($environment)
+            ? array_map(static fn ($environmentValue): string => (string)$environmentValue, $environment)
+            : [];
+    }
+
+    /** @param array{command: string|array<int, string>, cwd: string, env: array<string, string>} $script */
+    private function runScript(array $script, string $name): void
+    {
+        if ($script['command'] === '' || $script['command'] === []) {
             return;
         }
 
-        $processManager = new ProcessManager($script, ROOT_PATH, $_ENV);
+        $processManager = new ProcessManager($script['command'], $script['cwd'], array_merge($_ENV, $script['env']));
         try {
             $processManager->start();
             $processManager->closeStdin();
@@ -161,9 +210,7 @@ class Lifecycle
         } catch (\RuntimeException $e) {
             Logs::error('Lifecycle', $name . ' script failed: ' . $e->getMessage());
         } finally {
-            if ($processManager->isRunning()) {
-                $processManager->forceStop(1);
-            }
+            $processManager->forceStop(1);
         }
     }
 

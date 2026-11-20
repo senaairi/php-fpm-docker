@@ -6,8 +6,16 @@
 
 ```json
 {
-  "boot_script": "",
-  "shutdown_script": "",
+  "boot_script": {
+    "command": "",
+    "cwd": "/data/srv/api",
+    "env": {}
+  },
+  "shutdown_script": {
+    "command": "",
+    "cwd": "/data/srv/api",
+    "env": {}
+  },
   "services": {
     "_defaults": {
       "restart_interval": 5,
@@ -31,24 +39,38 @@
     "refresh-cache": {
       "type": "tick",
       "time": "60",
-      "command": "sh /wwwroot/refresh-cache.sh"
+      "command": ["sh", "/wwwroot/refresh-cache.sh"],
+      "cwd": "/wwwroot",
+      "env": {}
     },
     "daily-report": {
       "type": "time",
       "time": "02:30:00",
-      "command": "sh /wwwroot/daily-report.sh"
+      "command": ["sh", "/wwwroot/daily-report.sh"],
+      "cwd": "/wwwroot",
+      "env": {}
     }
   }
 }
 ```
 
-生命周期字段也可写在 `lifecycle` 对象中；顶层字段优先：
+生命周期字段也可写在 `lifecycle` 对象中；顶层字段优先。脚本可以是字符串、命令数组，或包含 `command`、`cwd`、`env` 的对象：
 
 ```json
 {
   "lifecycle": {
-    "boot_script": "sh ./scripts/boot.sh",
-    "shutdown_script": "sh ./scripts/shutdown.sh"
+    "boot_script": {
+      "command": ["sh", "./scripts/boot.sh"],
+      "cwd": "/wwwroot",
+      "env": {
+        "APP_ENV": "production"
+      }
+    },
+    "shutdown_script": {
+      "command": ["sh", "./scripts/shutdown.sh"],
+      "cwd": "/wwwroot",
+      "env": {}
+    }
   }
 }
 ```
@@ -57,9 +79,9 @@
 
 | 字段 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `boot_script` | string | 空 | 后台服务、定时器和管理 HTTP 服务启动前执行的 Shell 命令。 |
-| `shutdown_script` | string | 空 | 定时器、后台服务和 HTTP 停止后执行的 Shell 命令。 |
-生命周期脚本由 `ProcessManager` 执行，使用 `/data/srv/api`（容器）或 `srv/api`（源码运行）作为工作目录，并继承管理程序环境。脚本的 stdout/stderr 会实时通过 `Logs` 输出，是否打印到控制台或写入文件由对应的 `PFS_LOGS_*_PRINT` 和 `PFS_LOGS_*_SAVE` 配置控制；进程退出后会回收并记录非零退出码。
+| `boot_script` | string / array / object | 空 | 后台服务、定时器和管理 HTTP 服务启动前执行的命令。对象可配置 `command`、`cwd`、`env`。 |
+| `shutdown_script` | string / array / object | 空 | 定时器、后台服务和 HTTP 停止后执行的命令。对象可配置 `command`、`cwd`、`env`。 |
+生命周期脚本由 `ProcessManager` 执行；未指定 `cwd` 时使用 `/data/srv/api`（容器）或 `srv/api`（源码运行），并继承管理程序环境。数组命令绕过 Shell，字符串命令保留 Shell 语义。对象中的 `env` 会覆盖同名的管理程序环境变量。脚本的 stdout/stderr 会实时通过 `Logs` 输出，是否打印到控制台或写入文件由对应的 `PFS_LOGS_*_PRINT` 和 `PFS_LOGS_*_SAVE` 配置控制；进程退出后会回收并记录非零退出码。
 
 建议显式调用 shell 脚本：
 
@@ -140,7 +162,9 @@
 | --- | --- | --- |
 | `type` | `tick` / `time` | 周期执行或每日指定时间执行。 |
 | `time` | string | `tick` 使用秒数；`time` 使用 `HH:mm:ss`。 |
-| `command` | string | Shell 命令，由 `ProcessManager` 执行；stdout/stderr 会记录到本次执行日志。 |
+| `command` | string / array | 命令，由 `ProcessManager` 执行；数组绕过 Shell，字符串保留 Shell 语义，stdout/stderr 会记录到本次执行日志。 |
+| `cwd` | string | API 工作目录；定时器命令的工作目录。 |
+| `env` | object | 空；合并到管理程序环境中的定时器环境变量。 |
 
 `PFS_TIMER_LOGS_MAX` 控制定时器执行历史内存条数，默认 `100`，最小有效值为 `1`。
 
@@ -152,7 +176,9 @@
     "refresh-cache": {
       "type": "tick",
       "time": "60",
-      "command": "sh /wwwroot/refresh-cache.sh"
+      "command": ["sh", "/wwwroot/refresh-cache.sh"],
+      "cwd": "/wwwroot",
+      "env": {}
     }
   }
 }

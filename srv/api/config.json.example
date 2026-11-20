@@ -1,6 +1,14 @@
 {
-  "boot_script": "",
-  "shutdown_script": "",
+  "boot_script": {
+    "command": "",
+    "cwd": "/data/srv/api",
+    "env": {}
+  },
+  "shutdown_script": {
+    "command": "",
+    "cwd": "/data/srv/api",
+    "env": {}
+  },
   "services": {
     "_defaults": {
       "restart_interval": 5,
@@ -22,12 +30,16 @@
     "tt2": {
       "type": "tick",
       "time": "5",
-      "command": "sh -c 'echo 123'"
+      "command": ["sh", "-c", "echo 123"],
+      "cwd": "/data/srv/api",
+      "env": {}
     },
     "tt3": {
       "type": "time",
       "time": "17:19:00",
-      "command": "sh -c 'echo aaaa3'"
+      "command": ["sh", "-c", "echo aaaa3"],
+      "cwd": "/data/srv/api",
+      "env": {}
     }
   }
 }
