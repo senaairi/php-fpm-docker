@@ -12,6 +12,7 @@ class TimerTask
     public string $last_exec;
     public ?string $last_logs;
     public int $timer;
+    private ?ProcessManager $process = null;
     /**
      * @var array{
      *     start: string,
@@ -24,7 +25,8 @@ class TimerTask
     public string $status = 'wait';
     public bool $down = false;
 
-    public function boot() {
+    public function boot(): void
+    {
         if ($this->type == 'tick') {
             $this->timer = \Swoole\Timer::tick($this->time * 1000, [$this, 'execute']);
         } else if ($this->type == 'time') {
@@ -33,11 +35,15 @@ class TimerTask
     }
     public function clean(): void
     {
-        \Swoole\Timer::clear($this->timer);
+        if (isset($this->timer)) {
+            \Swoole\Timer::clear($this->timer);
+        }
         $this->down = true;
-        while (true) {
-            if ($this->status == 'exec') \Swoole\Coroutine\System::sleep(1);
-            break;
+        while ($this->status === 'exec') {
+            if ($this->process?->isRunning()) {
+                $this->process->forceStop(1);
+            }
+            \Swoole\Coroutine\System::sleep(0.01);
         }
     }
     public function nextTime(): void
@@ -61,10 +67,12 @@ class TimerTask
         Logs::debug('Timer', $this->name.' execute');
 
         $start = Carbon::now();
+        $logs = '';
         try {
-            $logs = eval($this->command);
-        } catch (\Exception | \Throwable $e) {
-            $logs = "执行command代码异常：{$e->getMessage()}\r\n{$e->getTraceAsString()}";
+            $logs = $this->runCommand();
+        } catch (\Throwable $e) {
+            $logs = "执行 Shell 命令异常：{$e->getMessage()}\r\n";
+            Logs::error('Timer', $this->name.' command failed: '.$e->getMessage());
         }
         $end = Carbon::now();
 
@@ -82,5 +90,49 @@ class TimerTask
             $this->execute_logs = array_slice($this->execute_logs, -$max_logs);
         }
         $this->status = 'wait';
+    }
+
+    private function runCommand(): string
+    {
+        if (trim($this->command) === '') {
+            throw new \RuntimeException('定时器命令为空');
+        }
+
+        $processManager = new ProcessManager($this->command, ROOT_PATH, $_ENV);
+        $this->process = $processManager;
+        try {
+            $processManager->start();
+            $processManager->closeStdin();
+            return $this->collectOutput($processManager);
+        } finally {
+            $this->stopCommandProcess($processManager);
+            $this->process = null;
+        }
+    }
+
+    private function collectOutput(ProcessManager $processManager): string
+    {
+        $logs = '';
+        while ($processManager->isRunning()) {
+            $event = $processManager->getOutputChannel()->pop(0.05);
+            if (is_array($event) && isset($event['data'])) {
+                $logs .= (string)$event['data'];
+            }
+        }
+
+        $processManager->wait(1);
+        while (($event = $processManager->getOutputChannel()->pop(0)) !== false) {
+            if (is_array($event) && isset($event['data'])) {
+                $logs .= (string)$event['data'];
+            }
+        }
+        return $logs;
+    }
+
+    private function stopCommandProcess(ProcessManager $processManager): void
+    {
+        if ($processManager->isRunning()) {
+            $processManager->forceStop(1);
+        }
     }
 }

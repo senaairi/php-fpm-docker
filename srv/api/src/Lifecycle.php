@@ -2,8 +2,6 @@
 namespace Lihzorg\PhpFpmSrvApi;
 
 use Ramsey\Uuid\Uuid;
-use Swoole\Coroutine;
-use Swoole\Process as SwooleProcess;
 
 /**
  * Owns application initialization, signal handling, startup and shutdown.
@@ -149,12 +147,61 @@ class Lifecycle
 
     private function runScript(string $script, string $name): void
     {
-        if ($script === '') {
+        if (trim($script) === '') {
             return;
         }
-        $output = shell_exec($script);
-        if (is_string($output) && trim($output) !== '') {
-            Logs::info('Lifecycle', $name . ': ' . trim($output));
+
+        $processManager = new ProcessManager($script, ROOT_PATH, $_ENV);
+        try {
+            $processManager->start();
+            $processManager->closeStdin();
+            $this->streamScriptOutput($processManager);
+            $processManager->wait(1);
+            $this->logScriptExit($name, $processManager->getExitCode());
+        } catch (\RuntimeException $e) {
+            Logs::error('Lifecycle', $name . ' script failed: ' . $e->getMessage());
+        } finally {
+            if ($processManager->isRunning()) {
+                $processManager->forceStop(1);
+            }
+        }
+    }
+
+    private function streamScriptOutput(ProcessManager $processManager): void
+    {
+        while ($processManager->isRunning()) {
+            $this->writeScriptOutput($processManager->getOutputChannel()->pop(0.05));
+        }
+
+        while (($event = $processManager->getOutputChannel()->pop(0)) !== false) {
+            $this->writeScriptOutput($event);
+        }
+    }
+
+    private function writeScriptOutput(mixed $event): void
+    {
+        if (!is_array($event) || !isset($event['data'])) {
+            return;
+        }
+
+        $stream = ($event['stream'] ?? 'stdout') === 'stderr' ? 'stderr' : 'stdout';
+        $output = rtrim((string)$event['data'], "\r\n");
+        if ($output === '') {
+            return;
+        }
+
+        $message = 'Lifecycle script ' . $stream . ': ' . $output;
+        if ($stream === 'stderr') {
+            Logs::error('Lifecycle', $message);
+            return;
+        }
+        Logs::info('Lifecycle', $message);
+    }
+
+    private function logScriptExit(string $name, ?int $exitCode): void
+    {
+        if ($exitCode !== 0) {
+            Logs::error('Lifecycle', $name . ' script exited with code ' . ($exitCode ?? 'unknown'));
         }
     }
 
