@@ -22,12 +22,12 @@
     "tt2": {
       "type": "tick",
       "time": "5",
-      "command": "return shell_exec('echo 123');"
+      "command": "sh -c 'echo 123'"
     },
     "tt3": {
       "type": "time",
       "time": "17:19:00",
-      "command": "return shell_exec('echo aaaa3');"
+      "command": "sh -c 'echo aaaa3'"
     }
   }
 }

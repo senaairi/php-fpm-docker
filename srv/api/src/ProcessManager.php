@@ -10,7 +10,8 @@ class ProcessManager
     public const STATUS_REAPED  = 'reaped';  // 自然退出并已回收
     public const STATUS_STOPPED = 'stopped'; // 被强制停止并已回收
 
-    private $command;
+    /** @var string|array<int, string> */
+    private string|array $command;
     private ?string $cwd;
     private ?array $env;
 
@@ -39,7 +40,7 @@ class ProcessManager
     public Channel $statusChannel;
 
     public function __construct(
-        $command,
+        string|array $command,
         ?string $cwd = null,
         ?array $env = null,
         int $outputCapacity = 1024,

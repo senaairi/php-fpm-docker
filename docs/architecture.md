@@ -51,11 +51,11 @@ Services use ordinary stdin/stdout/stderr pipes rather than a PTY, so programs t
 
 Shutdown can be triggered by `SIGTERM`, `SIGINT`, or the signed `POST /api/container/shutdown` request. Lifecycle stops timers, asks services to stop and waits for them, stops the HTTP server, then runs the optional `shutdown_script`. The PHP management process then exits.
 
-Lifecycle scripts are executed with PHP `shell_exec()`. They should finish on their own; `shell_exec()` does not provide reliable timeout or exit-code handling.
+Lifecycle scripts run through `ProcessManager`; stdout and stderr are sent to `Logs` as they are produced, following the configured console and file log settings. The child process is reaped after exit.
 
 ## Timers
 
 - `tick` runs at the configured interval in seconds.
 - `time` runs daily at the configured `HH:mm:ss`.
 
-Timer commands are PHP code evaluated by the management process. Execution history is stored in memory and is cleared when that process restarts.
+Timer commands are shell commands executed and reaped by `ProcessManager`. Their stdout/stderr is stored in the in-memory execution history, which is cleared when the management process restarts.

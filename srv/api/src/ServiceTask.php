@@ -19,7 +19,8 @@ class ServiceTask
     public array $output_lines = [];
 
     private string $cwd;
-    private string $stop_command;
+    /** @var string|array<int, string> */
+    private string|array $stop_command;
     /** @var array<string, string> */
     private array $env;
     private int $restart_interval;
@@ -45,17 +46,14 @@ class ServiceTask
     public function __construct(string $name, array $config, array $defaults = [])
     {
         $this->name = $name;
-        $command = $config['command'] ?? '';
-        $this->command = is_array($command)
-            ? array_map(static fn ($value): string => (string)$value, array_values($command))
-            : trim((string)$command);
-        $this->stop_command = trim((string)(
+        $this->command = $this->normalizeCommand($config['command'] ?? '');
+        $this->stop_command = $this->normalizeCommand(
             $config['stop_command']
             ?? $config['stop_script']
             ?? $config['shutdown_command']
             ?? $defaults['stop_command']
             ?? ''
-        ));
+        );
         $this->cwd = (string)($config['cwd'] ?? $defaults['cwd'] ?? ROOT_PATH);
         $this->env = is_array($config['env'] ?? null)
             ? array_map(static fn ($value): string => (string)$value, $config['env'])
@@ -420,7 +418,7 @@ class ServiceTask
             return;
         }
 
-        if ($this->stop_command !== '' && $this->runStopCommand()) {
+        if (!$this->isEmptyCommand($this->stop_command) && $this->runStopCommand()) {
             // A stop script gets a chance to perform graceful shutdown first.
             $this->process->wait(2.0);
         }
@@ -443,14 +441,14 @@ class ServiceTask
             return false;
         }
 
-        $pid = $this->process->pid !== null ? (string)$this->process->pid : '';
+        $pid = $this->process->getPid();
 
         $manager = new ProcessManager(
             $this->stop_command,
             $this->cwd !== '' ? $this->cwd : null,
             array_merge($_ENV, [
                 'PFS_SERVICE_NAME' => $this->name,
-                'PFS_SERVICE_PID' => $pid,
+                'PFS_SERVICE_PID' => $pid !== null ? (string)$pid : '',
                 'PFS_SERVICE_COMMAND' => is_array($this->command)
                     ? json_encode($this->command, JSON_UNESCAPED_SLASHES)
                     : $this->command,
@@ -495,5 +493,19 @@ class ServiceTask
     {
         $safe = preg_replace('/[^a-zA-Z0-9_.-]+/', '_', $name);
         return $safe !== null && $safe !== '' ? $safe : 'service';
+    }
+
+    /** @return string|array<int, string> */
+    private function normalizeCommand(mixed $command): string|array
+    {
+        return is_array($command)
+            ? array_map(static fn ($value): string => (string)$value, array_values($command))
+            : trim((string)$command);
+    }
+
+    /** @param string|array<int, string> $command */
+    private function isEmptyCommand(string|array $command): bool
+    {
+        return $command === '' || $command === [];
     }
 }

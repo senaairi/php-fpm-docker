@@ -58,7 +58,7 @@ fastcgi_pass php8.5-fpm:9000;
 
 管理程序需要通过 `PFS_CONFIG` 提供内联 JSON，或通过 `PFS_CONFIG_FILE` 指定 JSON 配置文件。若两者都设置，则优先读取 `PFS_CONFIG_FILE`。JSON 不支持注释。
 
-服务配置支持数组或字符串形式的 `command`，以及工作目录、环境变量、重启间隔和输出日志等选项。定时任务可在 `timer` 中配置。完整字段说明见[配置参考](docs/configuration.md)。
+服务配置支持数组或字符串形式的 `command` 和 `stop_command`，以及工作目录、环境变量、重启间隔和输出日志等选项。定时任务的 `command` 是由 `ProcessManager` 执行的 Shell 命令。完整字段说明见[配置参考](docs/configuration.md)。
 
 ## 文档
 

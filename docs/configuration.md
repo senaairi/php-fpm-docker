@@ -31,12 +31,12 @@
     "refresh-cache": {
       "type": "tick",
       "time": "60",
-      "command": "return shell_exec('php /wwwroot/refresh-cache.php 2>&1');"
+      "command": "sh /wwwroot/refresh-cache.sh"
     },
     "daily-report": {
       "type": "time",
       "time": "02:30:00",
-      "command": "return shell_exec('php /wwwroot/daily-report.php 2>&1');"
+      "command": "sh /wwwroot/daily-report.sh"
     }
   }
 }
@@ -59,7 +59,7 @@
 | --- | --- | --- | --- |
 | `boot_script` | string | 空 | 后台服务、定时器和管理 HTTP 服务启动前执行的 Shell 命令。 |
 | `shutdown_script` | string | 空 | 定时器、后台服务和 HTTP 停止后执行的 Shell 命令。 |
-生命周期脚本由 PHP `shell_exec()` 直接执行，使用 `/data/srv/api`（容器）或 `srv/api`（源码运行）作为工作目录，并继承管理程序环境。`shell_exec()` 不提供可靠的退出码和超时控制，脚本应自行保证能结束；输出会写入管理程序日志。脚本结束后 PHP 主进程自然退出，不会额外向 PID 1 发送信号。
+生命周期脚本由 `ProcessManager` 执行，使用 `/data/srv/api`（容器）或 `srv/api`（源码运行）作为工作目录，并继承管理程序环境。脚本的 stdout/stderr 会实时通过 `Logs` 输出，是否打印到控制台或写入文件由对应的 `PFS_LOGS_*_PRINT` 和 `PFS_LOGS_*_SAVE` 配置控制；进程退出后会回收并记录非零退出码。
 
 建议显式调用 shell 脚本：
 
@@ -96,7 +96,7 @@
 | `restart_interval` | integer | `5` | 服务退出后自动拉起前等待秒数；允许 `0`。 |
 | `output_max_lines` | integer | `200` | 内存控制台历史行数上限，最小为 1。 |
 | `output_log` | boolean | `false` | 是否将 stdout/stderr 追加写入文件。 |
-| `stop_command` | string | 空 | 可选的服务关闭命令；未配置时直接发送 `SIGTERM`。 |
+| `stop_command` | string / array | 空 | 可选的服务关闭命令，由 `ProcessManager` 执行；未配置时直接发送 `SIGTERM`。 |
 
 兼容别名：
 
@@ -126,7 +126,7 @@
 }
 ```
 
-关闭命令额外获得 `PFS_SERVICE_NAME`、`PFS_SERVICE_PID` 和 `PFS_SERVICE_COMMAND` 环境变量。关闭命令自己的 stdout/stderr 也进入服务控制台与可选日志。
+关闭命令额外获得 `PFS_SERVICE_NAME`、`PFS_SERVICE_PID` 和 `PFS_SERVICE_COMMAND` 环境变量。关闭命令自己的 stdout/stderr 也进入服务控制台与可选日志。数组命令绕过 shell，字符串命令保留 shell 语义。
 
 设置 `output_log` 后，日志保存在：
 
@@ -140,9 +140,23 @@
 | --- | --- | --- |
 | `type` | `tick` / `time` | 周期执行或每日指定时间执行。 |
 | `time` | string | `tick` 使用秒数；`time` 使用 `HH:mm:ss`。 |
-| `command` | string | PHP 代码，通过 `eval()` 执行。通常 `return` 字符串作为执行日志。 |
+| `command` | string | Shell 命令，由 `ProcessManager` 执行；stdout/stderr 会记录到本次执行日志。 |
 
 `PFS_TIMER_LOGS_MAX` 控制定时器执行历史内存条数，默认 `100`，最小有效值为 `1`。
+
+例如：
+
+```json
+{
+  "timer": {
+    "refresh-cache": {
+      "type": "tick",
+      "time": "60",
+      "command": "sh /wwwroot/refresh-cache.sh"
+    }
+  }
+}
+```
 
 ## 环境变量
 
